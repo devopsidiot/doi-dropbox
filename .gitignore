@@ -1,0 +1,19 @@
+# compilied Go binaries
+lambda/bootstrap
+cli/dropbox-cli
+
+# terraform stuff
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/lambda_function.zip
+
+
+# private stuff
+terraform/terraform.tfvars
+
+# generated frontend config
+frontend/config.js
+
+.DS_Store
