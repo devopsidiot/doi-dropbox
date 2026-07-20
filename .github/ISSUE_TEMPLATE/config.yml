@@ -1,0 +1,9 @@
+# Disable blank issues so reports arrive with the context needed to act on them.
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/devopsidiot/doi-dropbox/security/advisories/new
+    about: Report privately. Do not open a public issue for security problems.
+  - name: Propose a design change
+    url: https://github.com/devopsidiot/doi-dropbox/blob/main/docs/adr/README.md
+    about: Significant changes start as an ADR discussion, not a pull request.

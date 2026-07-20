@@ -1,0 +1,32 @@
+name: Release
+
+# Runs when a version tag is pushed, e.g. `git tag v0.2.0 && git push --tags`.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # needed to create the GitHub Release and upload binaries
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # GoReleaser builds the changelog from git history, so it needs the
+          # full history rather than the default shallow clone.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

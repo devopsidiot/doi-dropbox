@@ -1,0 +1,50 @@
+# GoReleaser builds and publishes the binaries when a version tag is pushed.
+# Run `goreleaser check` to validate this file, and `goreleaser build --snapshot
+# --clean` to test a build locally without releasing anything.
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: doi-dropbox
+    binary: doi-dropbox
+    env:
+      # Static binaries: no libc dependency, so the same artifact runs anywhere
+      # on that platform. This is most of why distributing a Go CLI is easy.
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      # Windows on ARM isn't a platform this tool targets.
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      # Strip debug info (-s -w) to shrink the binary, and stamp the version so
+      # `doi-dropbox --version` reports something meaningful rather than "dev".
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+# Checksums let users verify a download wasn't tampered with in transit.
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

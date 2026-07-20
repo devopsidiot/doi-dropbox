@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run if the same branch is pushed again — no point burning
+# minutes on a commit that's already superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Default to no permissions, then grant per-job. Least privilege applies to CI
+# tokens the same way it applies to IAM roles.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build, vet, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Read the version from go.mod rather than pinning it here, so there's
+          # one place to bump it.
+          go-version-file: go.mod
+          cache: true
+
+      # gofmt is checked first and fails loudly: formatting is not a matter of
+      # opinion in Go, and catching it here keeps diffs free of noise.
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # -race catches data races that only appear under concurrency. This CLI is
+      # mostly sequential today, but the check is cheap and guards future changes.
+      - name: Test
+        run: go test ./... -race -coverprofile=coverage.out
+
+      - name: Report coverage
+        run: go tool cover -func=coverage.out | tail -1
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  # Confirms the binary actually builds for the platforms we claim to support.
+  # A CLI that only compiles on the maintainer's laptop isn't shareable.
+  cross-compile:
+    name: Cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -o /dev/null ./...

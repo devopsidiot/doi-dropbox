@@ -1,0 +1,41 @@
+# golangci-lint configuration.
+#
+# The linter set is deliberately modest. A wall of enabled linters produces
+# noise that people learn to ignore, which is worse than fewer checks that are
+# always acted on.
+version: "2"
+
+linters:
+  enable:
+    - errcheck    # unchecked errors — the single most valuable check in Go
+    - govet       # same suspicious-construct checks as `go vet`
+    - ineffassign # assignments that are never used
+    - staticcheck # a broad, high-signal correctness analyzer
+    - unused      # unused code
+    - misspell    # typos in comments and strings
+    - bodyclose   # HTTP response bodies that are never closed — a real leak
+    - gosec       # security-focused checks; this tool handles auth, so it earns its place
+
+  settings:
+    gosec:
+      excludes:
+        # G104 duplicates errcheck; running both just doubles the noise.
+        - G104
+
+  exclusions:
+    rules:
+      # Test files may legitimately ignore errors in setup and assertions.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  # Report everything rather than the default cap of 3 per linter — a truncated
+  # report trains people to fix only what's visible.
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -1,113 +1,122 @@
-# devopsidiot dropbox
+# doi-dropbox
 
-A private, single-user, password-plus-MFA protected place to drop files into an S3 bucket from a webpage or CLI. No AWS keys live in the browser or on remote workstations.
+[![CI](https://github.com/devopsidiot/doi-dropbox/actions/workflows/ci.yml/badge.svg)](https://github.com/devopsidiot/doi-dropbox/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devopsidiot/doi-dropbox)](https://goreportcard.com/report/github.com/devopsidiot/doi-dropbox)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-## How it works
+A single-user CLI for uploading files to a private S3 bucket — authenticated
+with a password and TOTP MFA, and **without any AWS credentials on the machine
+you're uploading from.**
 
-Log in with a username, password, and 6 digit code from your phone. Once logged in, when you drop a file, the website essentially asks "can I upload this" and gets back a one time, limited time web address to upload straight to s3. There is no AWS password stored where you upload from.
-
-```
-You (browser or CLI)
-   │  1. log in (username + password + phone code)
-   ▼
-Cognito  ── gives back a short-lived "you're logged in" token
-   │
-   │  2. "may I upload the-thing.jpg?"  (token attached)
-   ▼
-API Gateway ── checks the token is real, then calls ──►  Lambda function
-   │                                                         │
-   │           3. one-time upload URL  ◄─────────────────────┘
-   ▼
-You upload the file DIRECTLY to S3 using that URL
+```console
+$ doi-dropbox upload notes.md screenshot.png
+Logging in as dan...
+Password:
+MFA code: 123456
+  uploaded: notes.md
+  uploaded: screenshot.png
+All uploads finished.
 ```
 
----
+## Why it works this way
 
-## Repo contents
-```
-terraform/      buckets, login system, function, website hosting
-lambda/         Golang function that supplies upload tokens
-cli/            Golang CLI tool to upload files without the website
-frontend/       Webpage (index.html, app.js, generated config.js)
-scripts/        helper scripts for setup steps that can't be automated
-Makefile
-```
+The usual way to script an S3 upload is to put an IAM access key on the machine.
+That key is long-lived, has to be rotated, and is exactly the thing you don't
+want sitting on a laptop you travel with.
 
----
-
-## Project outline and steps
-
-### 1. Build Lambda
-
-Lambda is Golang that has to be compiled before terraform can package it.
-Compiling and testing is built in
-```
-make build-lambda
-make test
-```
-
----
-
-### 2. Create infra
-
-Run terraform
-
----
-
-### 3. Create user
-
-Terraform doesn't create the singular account (so the password never lands in tf's files)
-
-### 4. Turn on phone's MFA
+This tool takes a different path:
 
 ```
-./scripts/mfa.sh
+  you ──password + TOTP──► Cognito ──► short-lived ID token
+                                            │
+                                            ▼
+                              API Gateway (verifies the token)
+                                            │
+                                            ▼
+                                  Lambda mints a presigned URL
+                                            │
+                                            ▼
+                       CLI PUTs the file directly to S3 with that URL
 ```
 
-Script logs in, shows secret to type into auth app, confirms code. After this, logins require phone auth.
+The CLI never holds an AWS credential — only a token that expires in an hour and
+a presigned URL that's good for one object for five minutes. Nothing is written
+to disk. Every run re-authenticates from scratch.
 
----
+That last point is a deliberate tradeoff, not a missing feature. See
+[ADR-0002](docs/adr/0002-no-token-caching.md).
 
-### 5. Website go live
+## Install
 
-Generate website confi from terraform outputs, then upload it
+**From a release** (no Go toolchain needed):
 
+Download the archive for your platform from the
+[releases page](https://github.com/devopsidiot/doi-dropbox/releases), extract it,
+and put `doi-dropbox` somewhere on your `PATH`.
+
+**From source:**
+
+```bash
+go install github.com/devopsidiot/doi-dropbox/cli@latest
 ```
-make gen-config
-make deploy-frontend BUCKET=<frontend bucket name> DIST=<cloudfront distribution id>
-```
 
----
+## Configure
 
-### 6. Set up the command-line uploader
+The CLI needs four values. None of them are secrets — they're public
+identifiers for your own deployment. Set them as environment variables:
 
-Build and input your settings (all non-secret), then upload:
-
-```
-cd cli
-go build -o dropbox-cli .
-
-export COGNITO_REGION=us-east-1
-export COGNITO_CLIENT_ID=<client id from terraform output>
-export API_BASE_URL=<api url from terraform output>
+```bash
+export COGNITO_REGION=us-west-2
+export COGNITO_CLIENT_ID=<your cognito app client id>
+export API_BASE_URL=https://<id>.execute-api.<region>.amazonaws.com
 export DROPBOX_USERNAME=<your username>
-
-./dropbox-cli upload ~/Pictures/the_thing.jpg ~/Documents/report.pdf
 ```
 
-The function will ask for your password and a phone code, then upload each file.
+Or pass them per-invocation as flags (`--region`, `--client-id`, `--api-url`,
+`--username`). Flags win over environment variables.
 
-## Using it from another computer
+Your **password** is never configured — it's prompted for, with echo disabled,
+on every run.
 
-- **CLI:** copy the built binary over (or rebuild with `go build`), set the four
-  non-secret environment variables above, and run it. There are no AWS keys or
-  credential files to copy. Every run asks for your password and phone code
-  fresh — nothing is saved between runs, on any machine, by design.
+## Usage
 
----
+```bash
+doi-dropbox upload <file> [more files...]
+```
 
-## What each piece costs
+Multiple files in one invocation share a single login, so prefer
+`doi-dropbox upload a.txt b.txt` over two separate commands.
 
-Roughly **$0–3/month** for light personal use, dominated entirely by how much
-you store in S3 (about $0.023 per GB per month). The login system, function,
-API, and website hosting all sit inside AWS's free allowances at this scale.
+If one file fails, the rest still upload and the command exits non-zero — which
+means it composes correctly in scripts and cron jobs.
+
+```bash
+doi-dropbox --help          # all commands
+doi-dropbox upload --help   # flags for this subcommand
+```
+
+## Using it from another machine
+
+There's nothing machine-specific to copy. Install the binary, set the four
+non-secret environment variables, and run it — your password is typed in and
+your MFA code comes from your phone, neither of which is tied to a workstation.
+
+## Development
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). The short version:
+
+```bash
+make verify   # format check, build, vet, test — the same thing CI runs
+```
+
+AI agents working in this repo: see [`CLAUDE.md`](CLAUDE.md).
+
+## Design decisions
+
+Non-obvious choices are recorded as ADRs in [`docs/adr/`](docs/adr/). If you're
+wondering "why on earth did they do it *that* way," that's where the answer
+should be. If it isn't, that's a documentation bug worth filing.
+
+## License
+
+Apache 2.0 — see [`LICENSE`](LICENSE).
