@@ -19,7 +19,7 @@ jobs:
           # full history rather than the default shallow clone.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           # The released artifact is the CLI, so the toolchain comes from that
           # module. There is no go.mod at the repo root.

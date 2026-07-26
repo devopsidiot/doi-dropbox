@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           # Read the version from the module's go.mod rather than pinning it
           # here, so there's one place to bump it.
@@ -80,7 +80,7 @@ jobs:
         module: [cli, lambda]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           cache: true
@@ -115,7 +115,7 @@ jobs:
         working-directory: cli
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: cli/go.mod
           cache: true
