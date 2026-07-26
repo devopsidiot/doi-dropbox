@@ -177,6 +177,30 @@ func uploadOne(ctx context.Context, idToken, path string) error {
 	return nil
 }
 
+// uploadAll uploads every path, and deliberately does not stop at the first
+// failure: a bad file in the middle of a batch must not strand the ones after
+// it. Failures are reported as they happen and collapsed into a single non-nil
+// error at the end, so the exit code still says something went wrong.
+//
+// This is split out from runUpload so it can be tested without standing up an
+// authentication flow.
+func uploadAll(ctx context.Context, idToken string, paths []string) error {
+	anyFailed := false
+
+	for _, path := range paths {
+		if err := uploadOne(ctx, idToken, path); err != nil {
+			fmt.Printf("  FAILED: %v\n", err)
+			anyFailed = true
+		}
+	}
+
+	if anyFailed {
+		return fmt.Errorf("one or more uploads failed")
+	}
+	fmt.Println("All uploads finished.")
+	return nil
+}
+
 func runUpload(cmd *cobra.Command, args []string) error {
 
 	if clientID == "" || apiBaseURL == "" || username == "" {
@@ -191,18 +215,5 @@ func runUpload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	anyFailed := false
-
-	for _, path := range args {
-		if err := uploadOne(ctx, idToken, path); err != nil {
-			fmt.Printf("  FAILED: %v\n", err)
-			anyFailed = true
-		}
-	}
-
-	if anyFailed {
-		return fmt.Errorf("one or more uploads failed")
-	}
-	fmt.Println("All uploads finished.")
-	return nil
+	return uploadAll(ctx, idToken, args)
 }
