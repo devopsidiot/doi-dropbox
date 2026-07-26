@@ -152,16 +152,39 @@ func uploadOne(ctx context.Context, idToken, path string) error {
 
 	defer file.Close()
 
+	info, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("checking size of %s: %w", path, err)
+	}
+
 	contentType := mime.TypeByExtension(filepath.Ext(path))
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	putReq, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, file)
+	// The body is normally the file itself, but an empty one needs care: net/http
+	// documents ContentLength 0 with a non-nil Body as meaning "unknown", so an
+	// empty *os.File would chunk no matter what we set below. http.NoBody is the
+	// explicit "zero bytes" signal that makes the transport send
+	// Content-Length: 0.
+	var body io.Reader = file
+	if info.Size() == 0 {
+		body = http.NoBody
+	}
+
+	putReq, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, body)
 	if err != nil {
 		return fmt.Errorf("building upload for %s: %w", path, err)
 	}
 	putReq.Header.Set("Content-Type", contentType)
+
+	// http.NewRequest only infers a length for *bytes.Buffer, *bytes.Reader and
+	// *strings.Reader. The body here is an *os.File, so the length stays unknown
+	// and the transport falls back to Transfer-Encoding: chunked — which S3
+	// rejects on a presigned PUT, because it requires Content-Length unless the
+	// request carries an aws-chunked streaming signature. Setting it explicitly
+	// is what makes the upload a plain, signed PUT.
+	putReq.ContentLength = info.Size()
 
 	putResp, err := http.DefaultClient.Do(putReq)
 	if err != nil {

@@ -304,6 +304,69 @@ func TestUploadOnePutsWithTheSameContentType(t *testing.T) {
 	}
 }
 
+// Without an explicit ContentLength the body is an *os.File, whose length
+// net/http cannot infer, so the transport sends Transfer-Encoding: chunked. S3
+// rejects a chunked presigned PUT — it wants Content-Length unless the request
+// carries an aws-chunked streaming signature — so this is the difference
+// between every upload working and every upload failing against a real bucket.
+//
+// httptest accepts chunked happily, which is exactly why this needs asserting
+// explicitly rather than being assumed from a passing upload test.
+func TestUploadOneSendsContentLength(t *testing.T) {
+	const contents = "0123456789" // ten bytes
+
+	fb := newFakeBackend(t)
+	path := writeTempFile(t, "notes.txt", contents)
+
+	if err := uploadOne(context.Background(), "t", path); err != nil {
+		t.Fatalf("uploadOne: unexpected error: %v", err)
+	}
+
+	var put *recordedRequest
+
+	for i, r := range fb.seen() {
+		if r.method == http.MethodPut {
+			put = &fb.seen()[i]
+		}
+	}
+
+	if put == nil {
+		t.Fatal("no PUT was made")
+	}
+
+	// -1 is net/http's way of saying "unknown length", i.e. chunked.
+	if put.contentLength == -1 {
+		t.Fatal("PUT was sent with an unknown length (chunked); S3 rejects that on a presigned URL")
+	}
+
+	if got, want := put.contentLength, int64(len(contents)); got != want {
+		t.Errorf("PUT Content-Length: got %d, want %d", got, want)
+	}
+}
+
+// An empty file is the edge case where "no Content-Length" and "Content-Length:
+// 0" look the same to a careless implementation, and uploading an empty file
+// should still work.
+func TestUploadOneHandlesAnEmptyFile(t *testing.T) {
+	fb := newFakeBackend(t)
+	path := writeTempFile(t, "empty.txt", "")
+
+	if err := uploadOne(context.Background(), "t", path); err != nil {
+		t.Fatalf("uploadOne on an empty file: unexpected error: %v", err)
+	}
+
+	seen := fb.seen()
+	put := seen[len(seen)-1]
+
+	if put.contentLength != 0 {
+		t.Errorf("PUT Content-Length for an empty file: got %d, want 0", put.contentLength)
+	}
+
+	if put.body != "" {
+		t.Errorf("PUT body for an empty file: got %q, want empty", put.body)
+	}
+}
+
 func TestUploadOneReportsAMissingFile(t *testing.T) {
 	newFakeBackend(t)
 
