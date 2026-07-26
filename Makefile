@@ -3,18 +3,25 @@
 #
 # Note: the indented lines below must use TAB characters, not spaces. That's a
 # Make quirk, not a style choice.
+#
+# This repo is two independent Go modules, not one: the CLI under ./cli and the
+# Lambda handler under ./lambda, each with its own go.mod. There is no module at
+# the repo root, so every Go command has to run inside one of them — hence the
+# loops below and the `go -C` calls.
 
-.PHONY: help verify fmt build vet test lint clean install snapshot
+MODULES := cli lambda
+
+.PHONY: help verify fmt fmt-check build vet test lint clean install snapshot
 
 # `make` with no argument prints this.
 help:
 	@echo "make verify    - format check, build, vet, test (what CI runs)"
 	@echo "make fmt       - format the code in place"
-	@echo "make build     - compile the binary to ./doi-dropbox"
+	@echo "make build     - compile the CLI binary to ./doi-dropbox"
 	@echo "make test      - run tests with the race detector"
 	@echo "make lint      - run golangci-lint (must be installed)"
 	@echo "make snapshot  - build all release platforms locally, no publish"
-	@echo "make install   - install the binary to your GOPATH/bin"
+	@echo "make install   - install the CLI to your GOPATH/bin"
 	@echo "make clean     - remove build artifacts"
 
 # The one to run before pushing.
@@ -22,6 +29,7 @@ verify: fmt-check build vet test
 
 # Fails if anything is unformatted, and names the offenders. This mirrors the
 # CI step rather than silently reformatting, so local and CI behavior match.
+# gofmt walks the tree on its own, so this one does not need the module loop.
 fmt-check:
 	@unformatted=$$(gofmt -l .); \
 	if [ -n "$$unformatted" ]; then \
@@ -34,26 +42,42 @@ fmt-check:
 fmt:
 	gofmt -w .
 
+# Only the CLI is a distributable binary; the Lambda handler is packaged by the
+# deploy tooling. `go -C` builds from ./cli while leaving the output at the root.
 build:
-	go build -o doi-dropbox .
+	go -C cli build -o ../doi-dropbox .
 
 vet:
-	go vet ./...
+	@for m in $(MODULES); do \
+		echo "==> vet $$m"; \
+		(cd $$m && go vet ./...) || exit 1; \
+	done
 
 test:
-	go test ./... -race -cover
+	@for m in $(MODULES); do \
+		echo "==> test $$m"; \
+		(cd $$m && go test ./... -race -cover) || exit 1; \
+	done
 
 lint:
-	golangci-lint run
+	@for m in $(MODULES); do \
+		echo "==> lint $$m"; \
+		(cd $$m && golangci-lint run) || exit 1; \
+	done
 
 # Build every release platform locally without publishing anything. Useful
-# before tagging — see .claude/skills/release-cli/SKILL.md.
+# before tagging — see .claude/skills/release-cli/SKILL.md. GoReleaser is
+# configured with `dir: cli`, so this one runs from the root.
 snapshot:
 	goreleaser build --snapshot --clean
 
 install:
-	go install .
+	go -C cli install .
 
+# Also removes the per-module binaries: `go build ./...` inside a main package
+# leaves one named after the directory, which is easy to commit by accident.
 clean:
-	rm -f doi-dropbox coverage.out
+	rm -f doi-dropbox
+	rm -f $(addsuffix /coverage.out,$(MODULES))
+	rm -f $(join $(addsuffix /,$(MODULES)),$(MODULES))
 	rm -rf dist/

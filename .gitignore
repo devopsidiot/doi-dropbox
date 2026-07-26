@@ -1,6 +1,13 @@
-# compilied Go binaries
+# compiled Go binaries
 lambda/bootstrap
 cli/dropbox-cli
+
+# `make build` output, and what `go build ./...` drops inside each module —
+# Go names the binary after its directory, so these are what you actually get
+# from the commands the docs tell you to run.
+doi-dropbox
+cli/cli
+lambda/lambda
 
 # terraform stuff
 terraform/.terraform/
