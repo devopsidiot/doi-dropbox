@@ -18,16 +18,26 @@ cli/                 The CLI. Its own Go module.
   main.go            Entry point. Deliberately trivial: calls cmd.Execute().
   cmd/root.go        Cobra root command; shared config flags live here.
   cmd/upload.go      The upload subcommand: auth flow + upload logic.
-lambda/              The presigned-URL minter. A separate Go module.
-  handler.go         API Gateway handler: validates the filename, presigns a PUT.
+lambda/              The API. A separate Go module.
+  handler.go         Routes /upload-url, /files and /download-url; validates
+                     input and mints presigned URLs.
+frontend/            The web page served from CloudFront. No build step.
+  index.html         Structure. config.js is generated and gitignored.
+  app.js             Login, upload, browse, download.
+preview/             Local preview server. A separate Go module, dev only.
 terraform/           Cognito, API Gateway, Lambda, the uploads bucket, CloudFront.
 scripts/             One-time setup helpers (gen-config.sh, setup-mfa.sh).
 docs/adr/            Architecture Decision Records. Read before changing design.
 ```
 
-**There is no Go module at the repo root.** This repo is two independent
-modules — `github.com/devopsidiot/doi-dropbox/cli` and
-`github.com/devopsidiot/doi-dropbox/lambda` — and every Go command has to run
+There are two clients, the CLI and the web page, against one API. A change to
+what the API accepts has to account for both — see the filename allowlist note
+under Conventions.
+
+**There is no Go module at the repo root.** This repo is three independent
+modules — `github.com/devopsidiot/doi-dropbox/cli`,
+`github.com/devopsidiot/doi-dropbox/lambda` and
+`github.com/devopsidiot/doi-dropbox/preview` — and every Go command has to run
 inside one of them. Running `go build ./...` at the root fails with `directory
 prefix . does not contain main module`. Internal imports must match the module
 path of whichever module the file lives in.
@@ -45,16 +55,19 @@ To run a single check against one module, `cd` into it first. These fail at the
 repo root, because no module lives there:
 
 ```bash
-cd cli                # or: cd lambda
+cd cli                # or: cd lambda, cd preview
 go build ./...        # compiles
 go test ./... -race   # tests, with race detector
 go vet ./...          # catches suspicious-but-compiling code
 gofmt -l .            # lists unformatted files; must output nothing
 ```
 
-All four must pass, in both modules, before a change is complete. CI runs the
+All four must pass, in every module, before a change is complete. CI runs the
 same commands per module, so there is no "works locally, fails in CI" gap by
 design.
+
+To see the web page, `make preview` runs it in Docker against stand-ins for
+Cognito, the API and S3 — see `preview/README.md`.
 
 Note that `go build ./...` inside a main package leaves a binary named after the
 directory (`lambda/lambda`). Those are gitignored and `make clean` removes them.
@@ -92,6 +105,11 @@ rather than working around it:
   strip existing explanatory comments to "clean up" a file.
 - **Batch behavior:** a failed file must not abort the remaining uploads. Report
   it, continue, and return a non-nil error at the end so the exit code is right.
+- **The filename allowlist is `[A-Za-z0-9._ -]`, enforced in
+  `lambda/handler.go`.** The browser sanitizes names into that set first
+  (`sanitizeFilename` in `frontend/app.js`) so ordinary filenames don't come
+  back as a bare 400. That is a convenience, not a control — the server check is
+  the one that matters, and widening one without the other desynchronizes them.
 
 ## Common mistakes in this repo
 

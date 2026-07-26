@@ -12,9 +12,12 @@ this one delegates.
 
 ## The short version
 
-- Two Go modules, no module at the repo root: `.../doi-dropbox/cli` and
-  `.../doi-dropbox/lambda`. Go commands must run inside one of them.
-- Verify with: `make verify` (it covers both modules)
+- Three Go modules, no module at the repo root: `.../doi-dropbox/cli`,
+  `.../doi-dropbox/lambda` and `.../doi-dropbox/preview`. Go commands must run
+  inside one of them.
+- Two clients — the CLI and the web page under `frontend/` — against one API.
+- Verify with: `make verify` (it covers every module)
+- See the web page with: `make preview`
 - Four hard invariants (no AWS credentials, no token persistence, no secrets on
   disk or in argv, no direct S3 calls from the CLI) — see `CLAUDE.md` for the
   full statement of each and the reasoning behind them.

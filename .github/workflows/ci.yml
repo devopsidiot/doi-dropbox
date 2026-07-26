@@ -19,17 +19,18 @@ permissions:
 
 jobs:
   verify:
-    # This repo is two independent Go modules, not one: the CLI under ./cli and
-    # the Lambda handler under ./lambda, each with its own go.mod. There is no
-    # module at the repo root, so every Go command has to run inside one of them.
+    # This repo is three independent Go modules, not one: the CLI under ./cli,
+    # the Lambda handler under ./lambda, and the local preview server under
+    # ./preview, each with its own go.mod. There is no module at the repo root,
+    # so every Go command has to run inside one of them.
     name: Build, vet, test (${{ matrix.module }})
     runs-on: ubuntu-latest
     strategy:
-      # Report both modules' failures in one run rather than hiding the second
-      # behind the first.
+      # Report every module's failures in one run rather than hiding the later
+      # ones behind the first.
       fail-fast: false
       matrix:
-        module: [cli, lambda]
+        module: [cli, lambda, preview]
     defaults:
       run:
         working-directory: ${{ matrix.module }}
@@ -42,9 +43,14 @@ jobs:
           # here, so there's one place to bump it.
           go-version-file: ${{ matrix.module }}/go.mod
           cache: true
-          # setup-go resolves this from the workspace root, not from
-          # working-directory, so it needs the module prefix spelled out.
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          # setup-go resolves these from the workspace root, not from
+          # working-directory, so they need the module prefix spelled out.
+          # go.mod is listed as well as go.sum because preview/ has no
+          # dependencies and so has no go.sum, and setup-go errors out if the
+          # path resolves to nothing at all.
+          cache-dependency-path: |
+            ${{ matrix.module }}/go.mod
+            ${{ matrix.module }}/go.sum
 
       # gofmt is checked first and fails loudly: formatting is not a matter of
       # opinion in Go, and catching it here keeps diffs free of noise.
@@ -77,14 +83,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [cli, lambda]
+        module: [cli, lambda, preview]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           cache: true
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          cache-dependency-path: |
+            ${{ matrix.module }}/go.mod
+            ${{ matrix.module }}/go.sum
       # v6 installs golangci-lint v1, which cannot parse a `version: "2"`
       # config and fails before it looks at any code. The v2 config schema
       # needs action v7 or newer.
@@ -92,7 +100,7 @@ jobs:
         with:
           version: latest
           # The linter needs to run inside the module too; .golangci.yaml stays
-          # at the repo root and applies to both.
+          # at the repo root and applies to all of them.
           working-directory: ${{ matrix.module }}
 
   # Confirms the binary actually builds for the platforms we claim to support.

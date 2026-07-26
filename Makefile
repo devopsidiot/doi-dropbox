@@ -4,14 +4,15 @@
 # Note: the indented lines below must use TAB characters, not spaces. That's a
 # Make quirk, not a style choice.
 #
-# This repo is two independent Go modules, not one: the CLI under ./cli and the
-# Lambda handler under ./lambda, each with its own go.mod. There is no module at
-# the repo root, so every Go command has to run inside one of them — hence the
-# loops below and the `go -C` calls.
+# This repo is three independent Go modules, not one: the CLI under ./cli, the
+# Lambda handler under ./lambda, and the local preview server under ./preview,
+# each with its own go.mod. There is no module at the repo root, so every Go
+# command has to run inside one of them — hence the loops below and the `go -C`
+# calls.
 
-MODULES := cli lambda
+MODULES := cli lambda preview
 
-.PHONY: help verify fmt fmt-check build vet test lint clean install snapshot
+.PHONY: help verify fmt fmt-check build vet test lint clean install snapshot preview preview-stop
 
 # `make` with no argument prints this.
 help:
@@ -22,6 +23,7 @@ help:
 	@echo "make lint      - run golangci-lint (must be installed)"
 	@echo "make snapshot  - build all release platforms locally, no publish"
 	@echo "make install   - install the CLI to your GOPATH/bin"
+	@echo "make preview   - run the web page locally in Docker on :8080"
 	@echo "make clean     - remove build artifacts"
 
 # The one to run before pushing.
@@ -73,6 +75,19 @@ snapshot:
 
 install:
 	go -C cli install .
+
+# Serve the web page locally with stand-ins for Cognito, the API and S3, so the
+# UI can be clicked through without an AWS account. See preview/README.md.
+# The build context is the repo root because the image needs frontend/ too.
+preview:
+	docker build -f preview/Dockerfile -t doi-dropbox-preview .
+	@echo
+	@echo "open http://localhost:8080  (any username, password and 6-digit code)"
+	@echo
+	docker run --rm --name doi-dropbox-preview -p 8080:8080 doi-dropbox-preview
+
+preview-stop:
+	-docker rm -f doi-dropbox-preview
 
 # Also removes the per-module binaries: `go build ./...` inside a main package
 # leaves one named after the directory, which is easy to commit by accident.

@@ -24,8 +24,9 @@ pull request.
 
 You need Go (the version in `cli/go.mod`) and nothing else to build.
 
-This repo is two Go modules — the CLI under `cli/` and the Lambda handler under
-`lambda/` — with no module at the repo root. Go commands run inside one of them.
+This repo is three Go modules — the CLI under `cli/`, the Lambda handler under
+`lambda/`, and the local preview server under `preview/` — with no module at the
+repo root. Go commands run inside one of them.
 
 ```bash
 git clone https://github.com/devopsidiot/doi-dropbox.git

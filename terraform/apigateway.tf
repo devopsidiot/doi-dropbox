@@ -4,7 +4,9 @@ resource "aws_apigatewayv2_api" "main" {
 
   cors_configuration {
     allow_origins = ["https://${var.domain_name}"]
-    allow_methods = ["POST", "OPTIONS"]
+    # GET is here for `GET /files`. Without it the browser's preflight fails
+    # and the "Your files" panel never loads, even though the route exists.
+    allow_methods = ["GET", "POST", "OPTIONS"]
     allow_headers = ["Authorization", "Content-Type"]
     max_age       = 3600
   }
@@ -32,6 +34,25 @@ resource "aws_apigatewayv2_integration" "lambda" {
 resource "aws_apigatewayv2_route" "upload_url" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "POST /upload-url"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Lists what is in the bucket, for the "Your files" panel on the web page.
+resource "aws_apigatewayv2_route" "list_files" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /files"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Mints a short-lived presigned GET so the browser can download an object
+# straight from S3, the mirror image of the upload flow.
+resource "aws_apigatewayv2_route" "download_url" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /download-url"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

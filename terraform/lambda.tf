@@ -9,9 +9,20 @@ data "aws_iam_policy_document" "lambda_assume" {
 }
 
 data "aws_iam_policy_document" "lambda_s3" {
+  # Object-level access. GetObject is what a presigned download URL is signed
+  # against: the URL carries this role's authority, so the role has to hold the
+  # permission even though the Lambda never reads an object itself.
   statement {
-    actions   = ["s3:PutObject"]
+    actions   = ["s3:PutObject", "s3:GetObject"]
     resources = ["${aws_s3_bucket.uploads.arn}/*"]
+  }
+
+  # Bucket-level access, for `GET /files`. ListBucket is granted on the bucket
+  # ARN itself rather than on the objects under it — a distinction S3 makes, and
+  # a common reason list calls come back AccessDenied.
+  statement {
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.uploads.arn]
   }
 }
 
@@ -21,7 +32,7 @@ resource "aws_iam_role" "lambda_exec" {
 }
 
 resource "aws_iam_role_policy" "lambda_s3" {
-  name   = "dropbox-lambda-s3-put"
+  name   = "dropbox-lambda-s3"
   role   = aws_iam_role.lambda_exec.id
   policy = data.aws_iam_policy_document.lambda_s3.json
 }
