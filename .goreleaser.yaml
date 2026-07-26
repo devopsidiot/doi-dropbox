@@ -5,11 +5,16 @@ version: 2
 
 before:
   hooks:
-    - go mod tidy
+    # Hooks run from the project root, and there is no module there — the CLI is
+    # its own module under ./cli. `go -C` runs the command in that directory;
+    # before-hooks are plain strings, so there is no `dir:` key to use here.
+    - go -C cli mod tidy
 
 builds:
   - id: doi-dropbox
     binary: doi-dropbox
+    # The CLI is its own module under ./cli; there is no module at the repo root.
+    dir: cli
     env:
       # Static binaries: no libc dependency, so the same artifact runs anywhere
       # on that platform. This is most of why distributing a Go CLI is easy.

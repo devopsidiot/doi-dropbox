@@ -21,8 +21,11 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          # The released artifact is the CLI, so the toolchain comes from that
+          # module. There is no go.mod at the repo root.
+          go-version-file: cli/go.mod
           cache: true
+          cache-dependency-path: cli/go.sum
 
       - uses: goreleaser/goreleaser-action@v6
         with:

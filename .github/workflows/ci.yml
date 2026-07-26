@@ -19,17 +19,32 @@ permissions:
 
 jobs:
   verify:
-    name: Build, vet, test
+    # This repo is two independent Go modules, not one: the CLI under ./cli and
+    # the Lambda handler under ./lambda, each with its own go.mod. There is no
+    # module at the repo root, so every Go command has to run inside one of them.
+    name: Build, vet, test (${{ matrix.module }})
     runs-on: ubuntu-latest
+    strategy:
+      # Report both modules' failures in one run rather than hiding the second
+      # behind the first.
+      fail-fast: false
+      matrix:
+        module: [cli, lambda]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          # Read the version from go.mod rather than pinning it here, so there's
-          # one place to bump it.
-          go-version-file: go.mod
+          # Read the version from the module's go.mod rather than pinning it
+          # here, so there's one place to bump it.
+          go-version-file: ${{ matrix.module }}/go.mod
           cache: true
+          # setup-go resolves this from the workspace root, not from
+          # working-directory, so it needs the module prefix spelled out.
+          cache-dependency-path: ${{ matrix.module }}/go.sum
 
       # gofmt is checked first and fails loudly: formatting is not a matter of
       # opinion in Go, and catching it here keeps diffs free of noise.
@@ -57,20 +72,33 @@ jobs:
         run: go tool cover -func=coverage.out | tail -1
 
   lint:
-    name: golangci-lint
+    name: golangci-lint (${{ matrix.module }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [cli, lambda]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ matrix.module }}/go.mod
           cache: true
-      - uses: golangci/golangci-lint-action@v6
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+      # v6 installs golangci-lint v1, which cannot parse a `version: "2"`
+      # config and fails before it looks at any code. The v2 config schema
+      # needs action v7 or newer.
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
+          # The linter needs to run inside the module too; .golangci.yaml stays
+          # at the repo root and applies to both.
+          working-directory: ${{ matrix.module }}
 
   # Confirms the binary actually builds for the platforms we claim to support.
-  # A CLI that only compiles on the maintainer's laptop isn't shareable.
+  # A CLI that only compiles on the maintainer's laptop isn't shareable. Only
+  # the CLI is cross-compiled — the Lambda handler is built for one target by
+  # the release tooling, so a matrix of desktop platforms would prove nothing.
   cross-compile:
     name: Cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
@@ -82,12 +110,16 @@ jobs:
           - { goos: linux, goarch: arm64 }
           - { goos: darwin, goarch: arm64 }
           - { goos: windows, goarch: amd64 }
+    defaults:
+      run:
+        working-directory: cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: cli/go.mod
           cache: true
+          cache-dependency-path: cli/go.sum
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}

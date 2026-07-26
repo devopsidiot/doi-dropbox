@@ -22,19 +22,23 @@ type uploadRequest struct {
 	ContentType string `json:"contentType"`
 }
 
-type uploadRepsonse struct {
+type uploadResponse struct {
 	UploadURL string `json:"uploadUrl"`
 	Key       string `json:"key"`
 	ExpiresIn int    `json:"expiresIn"`
 }
 
 var (
-	presignClient *s3.presignClient
+	presignClient *s3.PresignClient
 	bucketName    string
 	expirySeconds int
 )
 
-var filenamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+// Spaces are permitted: they are ordinary in real filenames and harmless in an
+// S3 key (the SDK percent-encodes the key when it signs the URL). The pattern is
+// an allowlist, so it is still what keeps shell metacharacters, quotes and
+// path separators out of the key; traversal is rejected separately above.
+var filenamePattern = regexp.MustCompile(`^[A-Za-z0-9._ -]+$`)
 
 func init() {
 	bucketName = os.Getenv("BUCKET_NAME")
@@ -55,16 +59,16 @@ func init() {
 	presignClient = s3.NewPresignClient(s3Client)
 }
 
-func jsonResponse(statusCode int, body any) (events.ApiGatewayV2HTTPResponse, error) {
-	payload, err := json.Marchal(body)
+func jsonResponse(statusCode int, body any) (events.APIGatewayV2HTTPResponse, error) {
+	payload, err := json.Marshal(body)
 	if err != nil {
-		return events.ApiGatewayV2HTTPResponse{
+		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 500,
-			Body:       `{"error":"internal error building response}`,
+			Body:       `{"error":"internal error building response"}`,
 		}, nil
 	}
 
-	return events.ApiGatewayV2HTTPResponse{
+	return events.APIGatewayV2HTTPResponse{
 		StatusCode: statusCode,
 		Headers:    map[string]string{"Content-Type": "application/json"},
 		Body:       string(payload),
@@ -91,9 +95,9 @@ func validateFilename(name string) error {
 	return nil
 }
 
-func handleRequest(ctx context.Context, request events.ApiGatewayV2HTTPResponse) (events.ApiGatewayV2HTTPResponse, error) {
+func handleRequest(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 
-	if request.RequestContext.Authorizer != nill && request.RequestContext.Authorizer.JWT != nil {
+	if request.RequestContext.Authorizer != nil && request.RequestContext.Authorizer.JWT != nil {
 		username := request.RequestContext.Authorizer.JWT.Claims["username"]
 
 		log.Printf("upload request from user: %s", username)
@@ -129,7 +133,7 @@ func handleRequest(ctx context.Context, request events.ApiGatewayV2HTTPResponse)
 		return jsonResponse(500, map[string]string{"error": "could not create upload URL"})
 	}
 
-	return jsonResponse(200, uploadRepsonse{
+	return jsonResponse(200, uploadResponse{
 		UploadURL: presigned.URL,
 		Key:       key,
 		ExpiresIn: expirySeconds,

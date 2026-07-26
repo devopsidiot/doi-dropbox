@@ -22,7 +22,10 @@ pull request.
 
 ## Getting set up
 
-You need Go (the version in `go.mod`) and nothing else to build.
+You need Go (the version in `cli/go.mod`) and nothing else to build.
+
+This repo is two Go modules — the CLI under `cli/` and the Lambda handler under
+`lambda/` — with no module at the repo root. Go commands run inside one of them.
 
 ```bash
 git clone https://github.com/devopsidiot/doi-dropbox.git
@@ -41,7 +44,8 @@ infrastructure repo. You do not need them to build, test, or lint.
 make verify     # runs everything CI runs — do this before pushing
 ```
 
-Or individually:
+Or individually, from inside `cli/` or `lambda/` — these fail at the repo root,
+where there is no module:
 
 ```bash
 gofmt -w .            # format (not optional; CI fails on unformatted code)
@@ -50,8 +54,9 @@ go vet ./...          # catch suspicious constructs
 go test ./... -race   # tests with the race detector
 ```
 
-CI runs exactly these commands. If `make verify` passes locally, CI should pass
-too — if it doesn't, that's a bug in our setup and worth reporting.
+CI runs exactly these commands, once per module, which is what `make verify`
+does for you. If `make verify` passes locally, CI should pass too — if it
+doesn't, that's a bug in our setup and worth reporting.
 
 ## Testing expectations
 

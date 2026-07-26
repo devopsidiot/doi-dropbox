@@ -14,26 +14,50 @@ whole point of the design, not an implementation detail.
 ## Repository layout
 
 ```
-main.go              Entry point. Deliberately trivial: calls cmd.Execute().
-cmd/root.go          Cobra root command; shared config flags live here.
-cmd/upload.go        The upload subcommand: auth flow + upload logic.
+cli/                 The CLI. Its own Go module.
+  main.go            Entry point. Deliberately trivial: calls cmd.Execute().
+  cmd/root.go        Cobra root command; shared config flags live here.
+  cmd/upload.go      The upload subcommand: auth flow + upload logic.
+lambda/              The presigned-URL minter. A separate Go module.
+  handler.go         API Gateway handler: validates the filename, presigns a PUT.
+terraform/           Cognito, API Gateway, Lambda, the uploads bucket, CloudFront.
+scripts/             One-time setup helpers (gen-config.sh, setup-mfa.sh).
 docs/adr/            Architecture Decision Records. Read before changing design.
 ```
 
-Module path is `github.com/devopsidiot/doi-dropbox/cli`. Internal imports must
-match this exactly.
+**There is no Go module at the repo root.** This repo is two independent
+modules — `github.com/devopsidiot/doi-dropbox/cli` and
+`github.com/devopsidiot/doi-dropbox/lambda` — and every Go command has to run
+inside one of them. Running `go build ./...` at the root fails with `directory
+prefix . does not contain main module`. Internal imports must match the module
+path of whichever module the file lives in.
 
 ## Build, test, lint
 
+Use the Makefile — it runs each module in turn, which is the part that is easy
+to get wrong by hand:
+
 ```bash
+make verify           # format check, build, vet, test — what CI runs
+```
+
+To run a single check against one module, `cd` into it first. These fail at the
+repo root, because no module lives there:
+
+```bash
+cd cli                # or: cd lambda
 go build ./...        # compiles
 go test ./... -race   # tests, with race detector
 go vet ./...          # catches suspicious-but-compiling code
 gofmt -l .            # lists unformatted files; must output nothing
 ```
 
-All four must pass before a change is complete. CI runs the same commands, so
-there is no "works locally, fails in CI" gap by design.
+All four must pass, in both modules, before a change is complete. CI runs the
+same commands per module, so there is no "works locally, fails in CI" gap by
+design.
+
+Note that `go build ./...` inside a main package leaves a binary named after the
+directory (`lambda/lambda`). Those are gitignored and `make clean` removes them.
 
 ## Invariants — do not violate without an ADR
 

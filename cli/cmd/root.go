@@ -2,21 +2,22 @@ package cmd
 
 import (
 	"os"
+
 	"github.com/spf13/cobra"
 )
 
 var (
-	region		string
-	clientID	string
-	apiBaseURL	string
-	username	string
+	region     string
+	clientID   string
+	apiBaseURL string
+	username   string
 )
 
 var rootCmd = &cobra.Command{
-	Use:	"dropbox-cli",
-	Short:	"Upload files to your personal s3 dropbox",
-	Long:	"dropbox-cli logs into your Cognito account (with MFA) and uploads\n" +
-			"files to your private s3 bucket via presigned URLs. No AWS keys needed.",
+	Use:   "dropbox-cli",
+	Short: "Upload files to your personal s3 dropbox",
+	Long: "dropbox-cli logs into your Cognito account (with MFA) and uploads\n" +
+		"files to your private s3 bucket via presigned URLs. No AWS keys needed.",
 }
 
 func Execute() error {

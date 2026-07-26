@@ -12,8 +12,9 @@ this one delegates.
 
 ## The short version
 
-- Module path: `github.com/devopsidiot/doi-dropbox/cli`
-- Verify with: `go build ./... && go test ./... -race && go vet ./... && gofmt -l .`
+- Two Go modules, no module at the repo root: `.../doi-dropbox/cli` and
+  `.../doi-dropbox/lambda`. Go commands must run inside one of them.
+- Verify with: `make verify` (it covers both modules)
 - Four hard invariants (no AWS credentials, no token persistence, no secrets on
   disk or in argv, no direct S3 calls from the CLI) — see `CLAUDE.md` for the
   full statement of each and the reasoning behind them.
