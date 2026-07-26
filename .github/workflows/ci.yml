@@ -85,7 +85,10 @@ jobs:
           go-version-file: ${{ matrix.module }}/go.mod
           cache: true
           cache-dependency-path: ${{ matrix.module }}/go.sum
-      - uses: golangci/golangci-lint-action@v6
+      # v6 installs golangci-lint v1, which cannot parse a `version: "2"`
+      # config and fails before it looks at any code. The v2 config schema
+      # needs action v7 or newer.
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           # The linter needs to run inside the module too; .golangci.yaml stays

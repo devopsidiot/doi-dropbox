@@ -119,7 +119,9 @@ func requestUploadURL(ctx context.Context, idToken, path string) (string, error)
 		return "", fmt.Errorf("calling API: %w", err)
 	}
 
-	defer resp.Body.Close()
+	// The body is read to completion just below, so closing it is pure cleanup;
+	// a failure here tells the caller nothing they can act on.
+	defer func() { _ = resp.Body.Close() }()
 
 	respBytes, _ := io.ReadAll(resp.Body)
 
@@ -145,12 +147,18 @@ func uploadOne(ctx context.Context, idToken, path string) error {
 		return err
 	}
 
-	file, err := os.Open(path)
+	// gosec flags the variable path (G304). Opening a file the user named on the
+	// command line is the entire purpose of this tool, and it crosses no
+	// privilege boundary: the process runs as the user, who could read the file
+	// themselves. There is nothing to validate against.
+	file, err := os.Open(path) //nolint:gosec // the user names the file to upload
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", path, err)
 	}
 
-	defer file.Close()
+	// Opened read-only, so nothing is buffered and a close error means nothing
+	// to the caller.
+	defer func() { _ = file.Close() }()
 
 	info, err := file.Stat()
 	if err != nil {
@@ -190,7 +198,8 @@ func uploadOne(ctx context.Context, idToken, path string) error {
 	if err != nil {
 		return fmt.Errorf("uploading %s: %w", path, err)
 	}
-	defer putResp.Body.Close()
+	// S3 returns no body worth reading on a successful PUT; closing is cleanup.
+	defer func() { _ = putResp.Body.Close() }()
 
 	if putResp.StatusCode < 200 || putResp.StatusCode >= 300 {
 		return fmt.Errorf("upload of %s failed with status %d", path, putResp.StatusCode)
