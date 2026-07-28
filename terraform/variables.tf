@@ -5,9 +5,21 @@ variable "aws_region" {
 }
 
 variable "domain_name" {
-  description = "Your domain name"
+  # The hostname this app is served at — NOT the apex of the zone. This stack
+  # creates its own CloudFront distribution and a Route 53 A record at exactly
+  # this name, so pointing it at the apex takes over the domain and replaces
+  # whatever is already published there.
+  description = "Hostname to serve the dropbox at. Must not be the zone apex."
   type        = string
-  default     = "devopsidiot.com"
+  default     = "dropbox.devopsidiot.com"
+
+  validation {
+    # A subdomain has at least three labels. This will not catch every way of
+    # naming the apex, but it catches the one that actually happens: leaving
+    # the default at, or pasting in, the bare registered domain.
+    condition     = length(split(".", var.domain_name)) >= 3
+    error_message = "domain_name must be a subdomain (e.g. dropbox.example.com), not the zone apex."
+  }
 }
 
 variable "uploads_bucket_name" {
