@@ -36,6 +36,13 @@ resource "aws_route53_record" "cert_validation" {
   type    = each.value.type
   records = [each.value.record]
   ttl     = 60
+
+  # Same reasoning as the apex record in route53.tf. ACM derives the DNS
+  # validation record name from the domain and account, not from the individual
+  # certificate, so requesting a second cert for devopsidiot.com can hand back
+  # the exact validation CNAME that the previous cert already left in the zone.
+  # Without this, the apply dies partway through on a record collision.
+  allow_overwrite = true
 }
 
 resource "aws_acm_certificate_validation" "site" {

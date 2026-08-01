@@ -11,13 +11,14 @@
 
 MODULES := cli lambda
 
-.PHONY: help verify fmt fmt-check build vet test lint clean install snapshot
+.PHONY: help verify fmt fmt-check build build-lambda vet test lint clean install snapshot
 
 # `make` with no argument prints this.
 help:
 	@echo "make verify    - format check, build, vet, test (what CI runs)"
 	@echo "make fmt       - format the code in place"
 	@echo "make build     - compile the CLI binary to ./doi-dropbox"
+	@echo "make build-lambda - cross-compile the Lambda handler for AWS"
 	@echo "make test      - run tests with the race detector"
 	@echo "make lint      - run golangci-lint (must be installed)"
 	@echo "make snapshot  - build all release platforms locally, no publish"
@@ -42,10 +43,26 @@ fmt-check:
 fmt:
 	gofmt -w .
 
-# Only the CLI is a distributable binary; the Lambda handler is packaged by the
-# deploy tooling. `go -C` builds from ./cli while leaving the output at the root.
+# Only the CLI is a distributable binary; the Lambda handler is deployed rather
+# than shipped. `go -C` builds from ./cli while leaving the output at the root.
 build:
 	go -C cli build -o ../doi-dropbox .
+
+# Cross-compile the Lambda handler. Terraform does NOT build this for you — the
+# archive_file data source in terraform/lambda.tf zips ./lambda/bootstrap as it
+# finds it on disk, so `terraform plan` fails outright if this has never run.
+#
+# Every part of this is dictated by the function's configuration:
+#   - GOOS=linux, GOARCH=arm64  match `architectures = ["arm64"]`. Building on
+#     an Apple Silicon Mac gets the arch right by accident but the OS wrong, so
+#     both have to be set explicitly.
+#   - the output name `bootstrap` is required by the `provided.al2023` runtime,
+#     which looks for a file by exactly that name. It is not a choice.
+#   - CGO_ENABLED=0 forces a static binary. The runtime image is minimal and a
+#     dynamically-linked one fails at cold start, not at build time — which is
+#     a miserable way to find out.
+build-lambda:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go -C lambda build -o bootstrap .
 
 vet:
 	@for m in $(MODULES); do \
@@ -78,6 +95,7 @@ install:
 # leaves one named after the directory, which is easy to commit by accident.
 clean:
 	rm -f doi-dropbox
+	rm -f lambda/bootstrap
 	rm -f $(addsuffix /coverage.out,$(MODULES))
 	rm -f $(join $(addsuffix /,$(MODULES)),$(MODULES))
 	rm -rf dist/
