@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  index.html  --  The web page you see at devopsidiot.com
+  ============================================================================
+
+  WHAT IS THIS?
+  This is the actual web page. HTML describes the STRUCTURE of a page: where
+  the login boxes are, where the drop zone is, etc. It doesn't do anything by
+  itself -- the behavior (logging in, uploading) lives in app.js, which this
+  page loads at the very bottom.
+
+  HOW HTML WORKS, briefly:
+    - Everything sits between tags like <div> ... </div>. A tag in angle
+      brackets opens a section; the same tag with a slash closes it.
+    - "id" gives an element a unique name so our JavaScript can find it later,
+      e.g. document.getElementById("login-section").
+    - "class" is for styling with CSS.
+    - We keep the styling minimal on purpose -- you can make it pretty later.
+
+  THE PAGE HAS THREE PARTS, only one visible at a time:
+    1. #login-section  -- username + password boxes (shown first)
+    2. #mfa-section    -- the 6-digit code box (shown after password succeeds)
+    3. #upload-section -- the drag-and-drop area (shown after full login)
+  app.js flips these on and off by changing their style to "display: none"
+  (hidden) or "block" (visible).
+  ============================================================================
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>devopsidiot dropbox</title>
+
+  <!-- A little built-in styling so the page isn't completely bare. -->
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
+    input, button { font-size: 16px; padding: 8px; margin: 4px 0; width: 100%; box-sizing: border-box; }
+    /* The drop zone: a big dashed box you can drag files onto. */
+    #dropzone { border: 2px dashed #888; border-radius: 8px; padding: 40px; text-align: center; color: #555; cursor: pointer; }
+    #dropzone.dragging { border-color: #2a7; background: #eafff2; } /* highlights while dragging over it */
+    .hidden { display: none; } /* app.js adds/removes this class to show/hide sections */
+    .status-item { padding: 6px; border-bottom: 1px solid #eee; }
+    .error { color: #c00; }
+  </style>
+</head>
+<body>
+  <h1>devopsidiot dropbox</h1>
+
+  <!-- ===== SECTION 1: LOGIN (username + password) ===== -->
+  <div id="login-section">
+    <h2>Sign in</h2>
+    <!-- Each input has an id so app.js can read what you typed. -->
+    <input id="username" type="text" placeholder="Username" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="login-button">Continue</button>
+    <p id="login-error" class="error"></p> <!-- app.js writes error text here -->
+  </div>
+
+  <!-- ===== SECTION 2: MFA (the code from your phone) ===== -->
+  <!-- Starts hidden; app.js reveals it after the password step succeeds. -->
+  <div id="mfa-section" class="hidden">
+    <h2>Enter your MFA code</h2>
+    <input id="mfa-code" type="text" inputmode="numeric" placeholder="6-digit code">
+    <button id="mfa-button">Verify</button>
+    <p id="mfa-error" class="error"></p>
+  </div>
+
+  <!-- ===== SECTION 3: UPLOAD (drag & drop) ===== -->
+  <!-- Starts hidden; app.js reveals it once you're fully logged in. -->
+  <div id="upload-section" class="hidden">
+    <h2>Upload files</h2>
+    <!-- The drop zone. Clicking it also opens the file picker (wired in app.js). -->
+    <div id="dropzone">Drag files here, or click to choose</div>
+    <!-- A hidden file picker the drop zone triggers. "multiple" allows many files. -->
+    <input id="file-input" type="file" multiple class="hidden">
+    <!-- app.js adds one line here per file to show progress. -->
+    <div id="status-list"></div>
+  </div>
+
+  <!--
+    Load our JavaScript LAST, after all the HTML above exists, so the script
+    can find the elements. Also load a tiny config file first that holds your
+    Cognito/API settings (created by a script from your Terraform outputs).
+  -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
